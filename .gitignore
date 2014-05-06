@@ -1,1 +1,3 @@
 *.o
+answer.out
+ocl-solver
