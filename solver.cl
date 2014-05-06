@@ -23,6 +23,7 @@ __kernel void solve(
 {
 	int id = get_global_id(0);
 	long seed = ((id + 0xDEADFACEL) * 0x5DEECE66DL + 0xBL) & ((1L << 48) - 1);
+
 	int guesses[V];
 	int v1_vals[P];
 	int v2_vals[P];
@@ -48,7 +49,7 @@ __kernel void solve(
 	barrier(CLK_GLOBAL_MEM_FENCE);
 
 	equation_t equation;
-	for (iter=0; iter<1000; iter++){
+	for (iter=0; iter<30; iter++){
 		num_satisfied = 0;
 		v1 = abs((int)((seed * 0x5DEECE66DL + 0xBL) & ((1L << 48) - 1))) % V;
 		seed++;
@@ -78,7 +79,7 @@ __kernel void solve(
 			v2_vals[soln]++;
 		}
 
-		prev_best = atomic_max(best, num_satisfied); // memory inconsistency issue... sigh
+		prev_best = atomic_max(best, num_satisfied);
 		if (prev_best == num_satisfied){
 			my_lock = 1;
 			while (my_lock == 1){

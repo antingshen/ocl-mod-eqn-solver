@@ -89,13 +89,11 @@ int assign(equation_t* equations, int* output, int E, int V, int P){
         sizeof(cl_mem), &g_lock); 
         CHK_ERR(err);
 
-    printf("Calculating inverse table...\n");
     int* inverse = new int[P];
     int i;
     for (i=1; i<P; i++){
         inverse[i] = mod_inv(i, P);
     }
-    printf("Done\n");
     err = clEnqueueWriteBuffer(cv.commands, g_inverse, true, 0, sizeof(int)*P,
         inverse, 0, NULL, NULL); CHK_ERR(err);
     err = clSetKernelArg(kernel,4,
@@ -117,7 +115,7 @@ int assign(equation_t* equations, int* output, int E, int V, int P){
     printf("GPU work complete in %.4f\n", t1-t0);
     CHK_ERR(err);
 
-    err = clEnqueueReadBuffer(cv.commands, g_out, true, 0, sizeof(equation_t)*V,
+    err = clEnqueueReadBuffer(cv.commands, g_out, true, 0, sizeof(int)*V,
         output, 0, NULL, NULL);
     CHK_ERR(err);
 
