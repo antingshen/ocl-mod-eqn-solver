@@ -16,8 +16,8 @@ typedef struct
 __kernel void solve(
 	__global equation_t* equations,
 	__global int* output,
-	__global int* best,
-	__global int* lock,
+	volatile __global int* best,
+	volatile __global int* lock,
 	__constant int* inverses
 	)
 {
@@ -83,12 +83,12 @@ __kernel void solve(
 		if (prev_best == num_satisfied){
 			my_lock = 1;
 			while (my_lock == 1){
-				my_lock = atomic_xchg(lock, 1L);
+				my_lock = atomic_xchg(lock, 1);
 			};
 			for (i=0; i<V; i++){
 				output[i] = guesses[i];
 			}
-			atomic_xchg(lock, 0L);
+			atomic_xchg(lock, 0);
 		}
 
 		bestc_v1 = 0;

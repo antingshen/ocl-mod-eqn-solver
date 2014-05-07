@@ -118,9 +118,13 @@ int assign(equation_t* equations, int* output, int E, int V, int P){
     err = clEnqueueReadBuffer(cv.commands, g_out, true, 0, sizeof(int)*V,
         output, 0, NULL, NULL);
     CHK_ERR(err);
+    printf("Outputs read\n");
 
     clReleaseMemObject(g_in);
     clReleaseMemObject(g_out);
+    clReleaseMemObject(g_inverse);
+    clReleaseMemObject(g_lock);
+    clReleaseMemObject(g_best);
 
     uninitialize_ocl(cv);
 
