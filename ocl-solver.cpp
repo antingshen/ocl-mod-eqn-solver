@@ -34,8 +34,6 @@ int mod_inv(int x, int p)
 
 int assign(equation_t* equations, int* output, int E, int V, int P){
 
-    double t0, t1;
-
     // OpenCL setup
     std::string kernel_str;
 
@@ -96,7 +94,6 @@ int assign(equation_t* equations, int* output, int E, int V, int P){
         sizeof(cl_mem), &g_inverse); CHK_ERR(err);
 
     printf("Starting GPU...\n");
-    t0 = timestamp();
     err = clEnqueueNDRangeKernel(cv.commands, 
         kernel,
         1,//work_dim,
@@ -107,8 +104,6 @@ int assign(equation_t* equations, int* output, int E, int V, int P){
         NULL, //event_wait_list
         NULL //
         );
-    t1 = timestamp();
-    printf("GPU work complete in %.4f\n", t1-t0);
     CHK_ERR(err);
 
     err = clEnqueueReadBuffer(cv.commands, g_out, true, 0, sizeof(int)*V,
@@ -136,7 +131,7 @@ int assign(equation_t* equations, int* output, int E, int V, int P){
 
 
 int main(int argc, char *argv[]){
-    int t = 0; // test number
+    int t = 2; // test number
     FILE * fout = fopen ("answer.out", "w");
 
     char filename[10];
@@ -160,7 +155,11 @@ int main(int argc, char *argv[]){
     int* output = new int[V];
     memset (output, 0, sizeof(output));
 
+    double t0, t1;
+    t0 = timestamp();
     assign(equations, output, E, V, P);
+    t1 = timestamp();
+    printf("Work complete in %.6f\n", t1-t0);
 
     fprintf(fout, "%d", output[0]);
     for (int i = 1; i < V ;i++)

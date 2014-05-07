@@ -5,9 +5,9 @@
 #pragma OPENCL EXTENSION cl_khr_local_int32_extended_atomics : enable
 #pragma OPENCL EXTENSION cl_khr_int64_base_atomics : enable
 
-#define V 4
-#define E 4
-#define P 3
+#define V 144
+#define E 8096
+#define P 1459
 
 typedef struct
 {
@@ -48,14 +48,14 @@ __kernel void solve(
 	}
 
 	int prev_best;
-	int my_lock;
+	int waiting;
 	*best = 0;
 	*lock = 0;
 
 	barrier(CLK_GLOBAL_MEM_FENCE);
 
 	equation_t equation;
-	for (iter=0; iter<30; iter++){
+	for (iter=0; iter<10; iter++){
 		num_satisfied = 0;
 		v1 = abs((int)((seed * 0x5DEECE66DL + 0xBL) & ((1L << 48) - 1))) % V;
 		seed++;
@@ -87,25 +87,22 @@ __kernel void solve(
 
 		prev_best = atomic_max(best, num_satisfied);
 		if (prev_best == num_satisfied){
-			int countdown = 4000000;
-			barrier(CLK_GLOBAL_MEM_FENCE);
-			my_lock = atomic_xchg(lock, 1);
-			
-			while (my_lock == 1 && countdown > 0){
-				barrier(CLK_GLOBAL_MEM_FENCE);
-				my_lock = atomic_xchg(lock, 1);
-
-				countdown--; // countdown is there so it doesn't infinite loop when deadlocked..
-				if (countdown == 0){
-					output[0] = -1;
-					return;
+			waiting = 1;
+			int timeout = 4000000;
+			while (waiting && timeout>0){
+				if (!atomic_xchg(lock, 1)){
+					for (i=0; i<V; i++){
+						output[i] = guesses[i];
+					}
+					atomic_xchg(lock, 0);
+					waiting = 0;
 				}
-			};
-			for (i=0; i<V; i++){
-				output[i] = guesses[i];
+
+				timeout--;
+				if (timeout == 0){
+					atomic_max(best, 9999999);
+				}
 			}
-			atomic_xchg(lock, 0);
-			barrier(CLK_GLOBAL_MEM_FENCE);
 		}
 
 		bestc_v1 = 0;
