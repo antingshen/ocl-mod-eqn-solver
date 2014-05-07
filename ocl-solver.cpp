@@ -34,10 +34,6 @@ int mod_inv(int x, int p)
 
 int assign(equation_t* equations, int* output, int E, int V, int P){
 
-    // #pragma OPENCL EXTENSION cl_khr_int64 : require
-    // #pragma OPENCL EXTENSION cl_khr_int64 : require
-    // #pragma OPENCL EXTENSION cl_khr_int64 : require
-
     double t0, t1;
 
     // OpenCL setup
@@ -118,7 +114,12 @@ int assign(equation_t* equations, int* output, int E, int V, int P){
     err = clEnqueueReadBuffer(cv.commands, g_out, true, 0, sizeof(int)*V,
         output, 0, NULL, NULL);
     CHK_ERR(err);
-    printf("Outputs read\n");
+    int* best = new int[1];
+    err = clEnqueueReadBuffer(cv.commands, g_best, true, 0, sizeof(int),
+        best, 0, NULL, NULL);
+    CHK_ERR(err);
+    printf("Outputs read. Best: %d\n", *best);
+    delete[] best;
 
     clReleaseMemObject(g_in);
     clReleaseMemObject(g_out);

@@ -17,6 +17,7 @@ OCL_LIB=/opt/opencl-headers/include
 all: $(OBJS)
 	g++ ocl-solver.o clhelp.o -o ocl-solver -L$(OCL_LIB) -lOpenCL
 	./ocl-solver
+	cat answer.out
 endif
 
 clean:

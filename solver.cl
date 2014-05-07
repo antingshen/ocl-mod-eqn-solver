@@ -1,4 +1,10 @@
 
+#pragma OPENCL EXTENSION cl_khr_global_int32_base_atomics : enable
+#pragma OPENCL EXTENSION cl_khr_local_int32_base_atomics : enable
+#pragma OPENCL EXTENSION cl_khr_global_int32_extended_atomics : enable
+#pragma OPENCL EXTENSION cl_khr_local_int32_extended_atomics : enable
+#pragma OPENCL EXTENSION cl_khr_int64_base_atomics : enable
+
 #define V 4
 #define E 4
 #define P 3
@@ -81,14 +87,25 @@ __kernel void solve(
 
 		prev_best = atomic_max(best, num_satisfied);
 		if (prev_best == num_satisfied){
-			my_lock = 1;
-			while (my_lock == 1){
+			int countdown = 4000000;
+			barrier(CLK_GLOBAL_MEM_FENCE);
+			my_lock = atomic_xchg(lock, 1);
+			
+			while (my_lock == 1 && countdown > 0){
+				barrier(CLK_GLOBAL_MEM_FENCE);
 				my_lock = atomic_xchg(lock, 1);
+
+				countdown--; // countdown is there so it doesn't infinite loop when deadlocked..
+				if (countdown == 0){
+					output[0] = -1;
+					return;
+				}
 			};
 			for (i=0; i<V; i++){
 				output[i] = guesses[i];
 			}
 			atomic_xchg(lock, 0);
+			barrier(CLK_GLOBAL_MEM_FENCE);
 		}
 
 		bestc_v1 = 0;
