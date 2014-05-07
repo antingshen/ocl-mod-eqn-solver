@@ -2,21 +2,21 @@
 #include <cstdio>
 #include <cstring>
 #include <string>
-// #include <algorithm>
-// #include <unistd.h>
+#include <algorithm>
+#include <unistd.h>
 #include <sys/time.h>
 #include <time.h>
 
 #include "clhelp.h"
 
-typedef struct equation_t
+typedef struct
 {
     int a;
     int b;
     int c;
     int d;
     int e;
-};
+} equation_t;
 
 int mod_inv(int x, int p)
 {
@@ -32,6 +32,7 @@ int mod_inv(int x, int p)
     return x1;
 }
 
+#define NUM_THREADS 2048
 int assign(equation_t* equations, int* output, int E, int V, int P){
 
     // OpenCL setup
@@ -57,9 +58,9 @@ int assign(equation_t* equations, int* output, int E, int V, int P){
     g_in = clCreateBuffer(cv.context,CL_MEM_READ_WRITE,
         sizeof(equation_t)*E,NULL,&err); CHK_ERR(err); 
     g_out = clCreateBuffer(cv.context,CL_MEM_READ_WRITE,
-        sizeof(int)*V,NULL,&err); CHK_ERR(err);
+        sizeof(int)*V*NUM_THREADS,NULL,&err); CHK_ERR(err);
     g_best = clCreateBuffer(cv.context,CL_MEM_READ_WRITE,
-        sizeof(int),NULL,&err); CHK_ERR(err);
+        sizeof(int)*NUM_THREADS,NULL,&err); CHK_ERR(err);
     g_lock = clCreateBuffer(cv.context,CL_MEM_READ_WRITE,
         sizeof(int),NULL,&err); CHK_ERR(err);
     g_inverse = clCreateBuffer(cv.context,CL_MEM_READ_WRITE,
@@ -67,8 +68,16 @@ int assign(equation_t* equations, int* output, int E, int V, int P){
 
     err = clEnqueueWriteBuffer(cv.commands, g_in, true, 0, sizeof(equation_t)*E,
         equations, 0, NULL, NULL); CHK_ERR(err);
+    int* outputs = new int[V*NUM_THREADS];
+    // memset(outputs, 0, sizeof(int)*V*NUM_THREADS);
+    // err = clEnqueueWriteBuffer(cv.commands, g_out, true, 0, sizeof(int)*V*NUM_THREADS,
+    //     outputs, 0, NULL, NULL); CHK_ERR(err);
+    // int zero = 0;
+    // err = clEnqueueWriteBuffer(cv.commands, g_best, true, 0, sizeof(int),
+    //     &zero, 0, NULL, NULL); CHK_ERR(err);
 
-    size_t global_work_size[1] = {2};
+    size_t global_work_size[1] = {NUM_THREADS};
+    // size_t local_work_size[1] = {1};
 
     err = clSetKernelArg(kernel,0,
         sizeof(cl_mem), &g_in); 
@@ -79,9 +88,6 @@ int assign(equation_t* equations, int* output, int E, int V, int P){
     err = clSetKernelArg(kernel,2,
         sizeof(cl_mem), &g_best); 
         CHK_ERR(err);
-    err = clSetKernelArg(kernel,3,
-        sizeof(cl_mem), &g_lock); 
-        CHK_ERR(err);
 
     int* inverse = new int[P];
     int i;
@@ -90,7 +96,7 @@ int assign(equation_t* equations, int* output, int E, int V, int P){
     }
     err = clEnqueueWriteBuffer(cv.commands, g_inverse, true, 0, sizeof(int)*P,
         inverse, 0, NULL, NULL); CHK_ERR(err);
-    err = clSetKernelArg(kernel,4,
+    err = clSetKernelArg(kernel,3,
         sizeof(cl_mem), &g_inverse); CHK_ERR(err);
 
     printf("Starting GPU...\n");
@@ -106,15 +112,30 @@ int assign(equation_t* equations, int* output, int E, int V, int P){
         );
     CHK_ERR(err);
 
-    err = clEnqueueReadBuffer(cv.commands, g_out, true, 0, sizeof(int)*V,
-        output, 0, NULL, NULL);
+    err = clEnqueueReadBuffer(cv.commands, g_out, true, 0, sizeof(int)*V*NUM_THREADS,
+        outputs, 0, NULL, NULL);
     CHK_ERR(err);
-    int* best = new int[1];
-    err = clEnqueueReadBuffer(cv.commands, g_best, true, 0, sizeof(int),
-        best, 0, NULL, NULL);
+    int* bests = new int[NUM_THREADS];
+    err = clEnqueueReadBuffer(cv.commands, g_best, true, 0, sizeof(int)*NUM_THREADS,
+        bests, 0, NULL, NULL);
     CHK_ERR(err);
-    printf("Outputs read. Best: %d\n", *best);
-    delete[] best;
+
+    int best_t = 0;
+    int best_v = 0;
+    for (i=0; i<NUM_THREADS; i++){
+        if (bests[i] > best_v){
+            best_v = bests[i];
+            best_t = i;
+        }
+    }
+    int* best_output = outputs + best_t * V;
+    for (i=0; i<V; i++){
+        output[i] = best_output[i];
+    }
+
+    printf("Outputs read. Best: %d\n", best_v);    
+    delete[] bests;
+    delete[] outputs;
 
     clReleaseMemObject(g_in);
     clReleaseMemObject(g_out);
