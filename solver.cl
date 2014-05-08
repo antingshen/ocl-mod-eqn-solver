@@ -1,13 +1,8 @@
 
-#pragma OPENCL EXTENSION cl_khr_global_int32_base_atomics : enable
-#pragma OPENCL EXTENSION cl_khr_local_int32_base_atomics : enable
-#pragma OPENCL EXTENSION cl_khr_global_int32_extended_atomics : enable
-#pragma OPENCL EXTENSION cl_khr_local_int32_extended_atomics : enable
-#pragma OPENCL EXTENSION cl_khr_int64_base_atomics : enable
 
-#define V 401
-#define E 45791
-#define P 227
+#define V 1000
+#define E 100000
+#define P 1051
 #define ITERS 1
 
 typedef struct
@@ -33,15 +28,17 @@ __kernel void solve(
 	__global int* my_output = output + V * id;
 	long seed = (((id+1) * (rand_int[0]) + id) * 0x5DEECE66DL + 0xBL) & ((1L << 48) - 1);
 
+	//__global int* guesses = all_guesses + V * id;
 	__private int guesses[V];
-	__private int v1_vals[P];
-	__private int v2_vals[P];
-	__private int v3_vals[P];
+	__private unsigned char v1_vals[P];
+	__private unsigned char v2_vals[P];
+	__private unsigned char v3_vals[P];
 
 	int num_satisfied;
 	int i, j, iter, satisfied, negative;
 	int v1, v2, v3, is_b, is_d, coef, eqls, soln;
-	int new_best, bestv_v1, bestv_v2, bestv_v3, bestc_v1, bestc_v2, bestc_v3, v1_best;
+	int new_best, bestv_v1, bestv_v2, bestv_v3, v1_best;
+	unsigned char bestc_v1, bestc_v2, bestc_v3;
 	int v1_cur, v2_cur, v3_cur, best_v, bestv_v;
 	// for (i=0; i<V; i++){
 	// 	guesses[i] = abs((int)((seed * 0x5DEECE66DL + 0xBL) & ((1L << 48) - 1))) % P;
@@ -182,9 +179,6 @@ __kernel void solve(
 	for (i=0; i<V; i++){
 		all_guesses[V*id + i] = guesses[i];
 	}
-	all_guesses[0] = rand_int[0];
-	all_guesses[1] = seed;
-	all_guesses[2] = -1;
 }
 
 

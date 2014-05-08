@@ -32,8 +32,8 @@ int mod_inv(int x, int p)
     return x1;
 }
 
-#define NUM_THREADS 1
-#define NUM_ITERS 1500
+#define NUM_THREADS 2048
+#define NUM_ITERS 3000
 int assign(equation_t* equations, int* output, int E, int V, int P){
 
     // OpenCL setup
@@ -55,7 +55,7 @@ int assign(equation_t* equations, int* output, int E, int V, int P){
     cl_int err = CL_SUCCESS;
 
     cl_mem g_in, g_out, g_inverse, g_best, g_guesses, g_seed;
-    int i;
+    int i,j;
 
     g_in = clCreateBuffer(cv.context,CL_MEM_READ_WRITE,
         sizeof(equation_t)*E,NULL,&err); CHK_ERR(err); 
@@ -116,15 +116,14 @@ int assign(equation_t* equations, int* output, int E, int V, int P){
         sizeof(cl_mem), &g_seed); CHK_ERR(err);
 
     int rand_int[1];
-    srand(1);
-
+    // srand(1);
+    int* bests = new int[NUM_THREADS];
     for (i=0; i<NUM_ITERS; i++){
 
         rand_int[0] = rand();
         err = clEnqueueWriteBuffer(cv.commands, g_seed, true, 0, sizeof(int),
             rand_int, 0, NULL, NULL); CHK_ERR(err);
 
-        printf("%d of %d\n", i+1, NUM_ITERS);
         err = clEnqueueNDRangeKernel(cv.commands, 
             kernel,
             1,//work_dim,
@@ -145,12 +144,36 @@ int assign(equation_t* equations, int* output, int E, int V, int P){
         //         printf("%d:%d ",j,outputs[j]);
         //     }
         // } printf("\n");
+
+
+        err = clEnqueueReadBuffer(cv.commands, g_best, true, 0, sizeof(int)*NUM_THREADS,
+            bests, 0, NULL, NULL);
+        CHK_ERR(err);
+
+        int best_t = 0;
+        int best_v = 0;
+        for (j=0; j<NUM_THREADS; j++){
+            // printf("%d ", bests[j]);
+            if (bests[j] > best_v){
+                best_v = bests[j];
+                best_t = j;
+            }
+        } // printf("\n");
+        int* best_output = outputs + best_t * V;
+        for (j=0; j<V; j++){
+            output[j] = best_output[j];
+        }
+
+        printf("%d of %d, best: %d\n", i+1, NUM_ITERS, best_v);
+
+        if (interrupted) {
+            break;
+        }
     }
 
     err = clEnqueueReadBuffer(cv.commands, g_out, true, 0, sizeof(int)*V*NUM_THREADS,
         outputs, 0, NULL, NULL);
     CHK_ERR(err);
-    int* bests = new int[NUM_THREADS];
     err = clEnqueueReadBuffer(cv.commands, g_best, true, 0, sizeof(int)*NUM_THREADS,
         bests, 0, NULL, NULL);
     CHK_ERR(err);
@@ -190,7 +213,7 @@ int assign(equation_t* equations, int* output, int E, int V, int P){
 
 
 int main(int argc, char *argv[]){
-    int t = 3; // test number
+    int t = 22; // test number
     FILE * fout = fopen ("answer.out", "w");
 
     char filename[10];
@@ -218,7 +241,7 @@ int main(int argc, char *argv[]){
     t0 = timestamp();
     assign(equations, output, E, V, P);
     t1 = timestamp();
-    printf("Work complete in %.6f\n", t1-t0);
+    printf("Total seconds elapsed: %.6f\n", t1-t0);
 
     fprintf(fout, "%d", output[0]);
     for (int i = 1; i < V ;i++)
