@@ -32,7 +32,8 @@ int mod_inv(int x, int p)
     return x1;
 }
 
-#define NUM_THREADS 2048
+#define NUM_THREADS 1
+#define NUM_ITERS 1500
 int assign(equation_t* equations, int* output, int E, int V, int P){
 
     // OpenCL setup
@@ -53,7 +54,8 @@ int assign(equation_t* equations, int* output, int E, int V, int P){
 
     cl_int err = CL_SUCCESS;
 
-    cl_mem g_in, g_out, g_inverse, g_best, g_lock;
+    cl_mem g_in, g_out, g_inverse, g_best, g_guesses, g_seed;
+    int i;
 
     g_in = clCreateBuffer(cv.context,CL_MEM_READ_WRITE,
         sizeof(equation_t)*E,NULL,&err); CHK_ERR(err); 
@@ -61,20 +63,27 @@ int assign(equation_t* equations, int* output, int E, int V, int P){
         sizeof(int)*V*NUM_THREADS,NULL,&err); CHK_ERR(err);
     g_best = clCreateBuffer(cv.context,CL_MEM_READ_WRITE,
         sizeof(int)*NUM_THREADS,NULL,&err); CHK_ERR(err);
-    g_lock = clCreateBuffer(cv.context,CL_MEM_READ_WRITE,
-        sizeof(int),NULL,&err); CHK_ERR(err);
+    g_guesses = clCreateBuffer(cv.context,CL_MEM_READ_WRITE,
+        sizeof(int)*V*NUM_THREADS,NULL,&err); CHK_ERR(err);
     g_inverse = clCreateBuffer(cv.context,CL_MEM_READ_WRITE,
         sizeof(int)*P,NULL,&err); CHK_ERR(err);
 
     err = clEnqueueWriteBuffer(cv.commands, g_in, true, 0, sizeof(equation_t)*E,
         equations, 0, NULL, NULL); CHK_ERR(err);
     int* outputs = new int[V*NUM_THREADS];
-    // memset(outputs, 0, sizeof(int)*V*NUM_THREADS);
-    // err = clEnqueueWriteBuffer(cv.commands, g_out, true, 0, sizeof(int)*V*NUM_THREADS,
-    //     outputs, 0, NULL, NULL); CHK_ERR(err);
-    // int zero = 0;
-    // err = clEnqueueWriteBuffer(cv.commands, g_best, true, 0, sizeof(int),
-    //     &zero, 0, NULL, NULL); CHK_ERR(err);
+    memset(outputs, 0, sizeof(int)*V*NUM_THREADS);
+    err = clEnqueueWriteBuffer(cv.commands, g_out, true, 0, sizeof(int)*V*NUM_THREADS,
+        outputs, 0, NULL, NULL); CHK_ERR(err);
+    err = clEnqueueWriteBuffer(cv.commands, g_best, true, 0, sizeof(int)*NUM_THREADS,
+        outputs, 0, NULL, NULL); CHK_ERR(err);
+
+    int* init_guesses = new int[V*NUM_THREADS];
+    for (i=0; i<V*NUM_THREADS; i++){
+        init_guesses[i] = rand() % P;
+    }
+    err = clEnqueueWriteBuffer(cv.commands, g_guesses, true, 0, sizeof(int)*V*NUM_THREADS,
+        init_guesses, 0, NULL, NULL); CHK_ERR(err);
+
 
     size_t global_work_size[1] = {NUM_THREADS};
     // size_t local_work_size[1] = {1};
@@ -88,29 +97,55 @@ int assign(equation_t* equations, int* output, int E, int V, int P){
     err = clSetKernelArg(kernel,2,
         sizeof(cl_mem), &g_best); 
         CHK_ERR(err);
+    err = clSetKernelArg(kernel,3,
+        sizeof(cl_mem), &g_guesses);
+        CHK_ERR(err);
 
     int* inverse = new int[P];
-    int i;
     for (i=1; i<P; i++){
         inverse[i] = mod_inv(i, P);
     }
     err = clEnqueueWriteBuffer(cv.commands, g_inverse, true, 0, sizeof(int)*P,
         inverse, 0, NULL, NULL); CHK_ERR(err);
-    err = clSetKernelArg(kernel,3,
+    err = clSetKernelArg(kernel,4,
         sizeof(cl_mem), &g_inverse); CHK_ERR(err);
 
-    printf("Starting GPU...\n");
-    err = clEnqueueNDRangeKernel(cv.commands, 
-        kernel,
-        1,//work_dim,
-        NULL, //global_work_offset
-        global_work_size, //global_work_size
-        NULL, //local_work_size
-        0, //num_events_in_wait_list
-        NULL, //event_wait_list
-        NULL //
-        );
-    CHK_ERR(err);
+    g_seed = clCreateBuffer(cv.context,CL_MEM_READ_WRITE,
+        sizeof(int),NULL,&err); CHK_ERR(err);
+    err = clSetKernelArg(kernel,5,
+        sizeof(cl_mem), &g_seed); CHK_ERR(err);
+
+    int rand_int[1];
+    srand(1);
+
+    for (i=0; i<NUM_ITERS; i++){
+
+        rand_int[0] = rand();
+        err = clEnqueueWriteBuffer(cv.commands, g_seed, true, 0, sizeof(int),
+            rand_int, 0, NULL, NULL); CHK_ERR(err);
+
+        printf("%d of %d\n", i+1, NUM_ITERS);
+        err = clEnqueueNDRangeKernel(cv.commands, 
+            kernel,
+            1,//work_dim,
+            NULL, //global_work_offset
+            global_work_size, //global_work_size
+            NULL, //local_work_size
+            0, //num_events_in_wait_list
+            NULL, //event_wait_list
+            NULL //
+            );
+        CHK_ERR(err);
+
+        // err = clEnqueueReadBuffer(cv.commands, g_guesses, true, 0, sizeof(int)*V*NUM_THREADS,
+        //     outputs, 0, NULL, NULL);
+        // CHK_ERR(err); int j;
+        // for (j=0; j<V; j++){
+        //     if (outputs[j] != init_guesses[j]){
+        //         printf("%d:%d ",j,outputs[j]);
+        //     }
+        // } printf("\n");
+    }
 
     err = clEnqueueReadBuffer(cv.commands, g_out, true, 0, sizeof(int)*V*NUM_THREADS,
         outputs, 0, NULL, NULL);
@@ -137,12 +172,14 @@ int assign(equation_t* equations, int* output, int E, int V, int P){
     printf("Outputs read. Best: %d\n", best_v);    
     delete[] bests;
     delete[] outputs;
+    delete[] init_guesses;
 
     clReleaseMemObject(g_in);
     clReleaseMemObject(g_out);
     clReleaseMemObject(g_inverse);
-    clReleaseMemObject(g_lock);
+    clReleaseMemObject(g_guesses);
     clReleaseMemObject(g_best);
+    clReleaseMemObject(g_seed);
 
     uninitialize_ocl(cv);
 
@@ -153,7 +190,7 @@ int assign(equation_t* equations, int* output, int E, int V, int P){
 
 
 int main(int argc, char *argv[]){
-    int t = 2; // test number
+    int t = 3; // test number
     FILE * fout = fopen ("answer.out", "w");
 
     char filename[10];
