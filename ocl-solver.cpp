@@ -123,11 +123,12 @@ int assign(equation_t* equations, int* output, int E, int V, int P){
     int best_t = 0;
     int best_v = 0;
     for (i=0; i<NUM_THREADS; i++){
+        // printf("%d ", bests[i]);
         if (bests[i] > best_v){
             best_v = bests[i];
             best_t = i;
         }
-    }
+    } // printf("\n");
     int* best_output = outputs + best_t * V;
     for (i=0; i<V; i++){
         output[i] = best_output[i];
