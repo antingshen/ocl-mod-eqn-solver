@@ -1,9 +1,8 @@
 
-
-#define V 1000
-#define E 100000
-#define P 1051
-#define ITERS 1
+#define V 999
+#define E 14999
+#define P 199
+#define ITERS 20
 
 typedef struct
 {

@@ -9,6 +9,11 @@
 
 #include "clhelp.h"
 
+#define NUM_THREADS 4096
+#define NUM_ITERS 3000000
+#define MAX_TIME 13500
+#define TEST_NUMBER 22
+
 typedef struct
 {
     int a;
@@ -32,8 +37,6 @@ int mod_inv(int x, int p)
     return x1;
 }
 
-#define NUM_THREADS 2048
-#define NUM_ITERS 3000
 int assign(equation_t* equations, int* output, int E, int V, int P){
 
     // OpenCL setup
@@ -115,9 +118,12 @@ int assign(equation_t* equations, int* output, int E, int V, int P){
     err = clSetKernelArg(kernel,5,
         sizeof(cl_mem), &g_seed); CHK_ERR(err);
 
+    double start;
     int rand_int[1];
     // srand(1);
     int* bests = new int[NUM_THREADS];
+
+    start = timestamp();
     for (i=0; i<NUM_ITERS; i++){
 
         rand_int[0] = rand();
@@ -164,11 +170,13 @@ int assign(equation_t* equations, int* output, int E, int V, int P){
             output[j] = best_output[j];
         }
 
-        printf("%d of %d, best: %d\n", i+1, NUM_ITERS, best_v);
+        int remaining = MAX_TIME - (int)(timestamp() - start);
 
-        if (interrupted) {
+        if (remaining < 0){
             break;
         }
+
+        printf("%d of %d, best: [%d], time remaining: %d\n", i+1, NUM_ITERS, best_v, remaining);
     }
 
     err = clEnqueueReadBuffer(cv.commands, g_out, true, 0, sizeof(int)*V*NUM_THREADS,
@@ -181,12 +189,12 @@ int assign(equation_t* equations, int* output, int E, int V, int P){
     int best_t = 0;
     int best_v = 0;
     for (i=0; i<NUM_THREADS; i++){
-        // printf("%d ", bests[i]);
+        printf("%d ", bests[i]);
         if (bests[i] > best_v){
             best_v = bests[i];
             best_t = i;
         }
-    } // printf("\n");
+    } printf("\n");
     int* best_output = outputs + best_t * V;
     for (i=0; i<V; i++){
         output[i] = best_output[i];
@@ -213,7 +221,7 @@ int assign(equation_t* equations, int* output, int E, int V, int P){
 
 
 int main(int argc, char *argv[]){
-    int t = 22; // test number
+    int t = TEST_NUMBER; // test number
     FILE * fout = fopen ("answer.out", "w");
 
     char filename[10];
